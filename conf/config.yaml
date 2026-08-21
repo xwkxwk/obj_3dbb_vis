@@ -1,0 +1,65 @@
+system:
+  base_data_path: /data
+
+redis:
+  host: 127.0.0.1
+  port: 6379
+  db: 0
+  password: 123456
+
+service:
+  module_name: obj3dbb_vis
+  http_port: 8883
+  async_flag: false
+  base_app_path: /workspace/boxer
+  base_lib_path: /workspace/boxer/libs
+  signal_key: obj3dbb_vis
+  input_queue_name: simu4d:perceive:camera
+
+log:
+  mode: release
+
+vocabulary: "1805"
+
+models:
+  boxer:
+    checkpoint: ckpts/boxernet_hw960in4x6d768-wssxpf9p.ckpt
+  groundingdino:
+    source_dir: libs/GroundingDINO
+    config: libs/GroundingDINO/groundingdino/config/GroundingDINO_SwinB_cfg.py
+    checkpoint: ckpts/groundingdino_swinb_cogcoor.pth
+    bert_path: ckpts/bert-base-uncased
+
+pipelines:
+  groundingdino:
+    box_threshold: 0.3
+    text_threshold: 0.25
+    topk: 100
+    min_area_ratio: 0.002
+    margin: 3
+    nms_iou: 0.5
+
+boxer:
+  num_samples: 100000
+  thresh3d: 0.5
+  depth_filter_min_m: 0.4
+  depth_filter_max_m: 8.0
+
+visualization:
+  detection_line_thickness: 2
+  detection_label_font_size: 0.8
+
+validation:
+  projected_2d_iou:
+    enabled: true
+    min_iou: 0.5
+
+fuse:
+  cluster_iou_threshold: 0.2
+  min_detections: 4
+  conf_threshold: 0.55
+  semantic_threshold: 0.0
+  nms: true
+  nms_iou: 0.4
+  same_semantic_ios_absorb: true
+  ios_absorb_threshold: 0.8

@@ -1,0 +1,40 @@
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+.coverage
+tests/htmlcov/
+htmlcov/
+
+# Environment
+.env
+*.egg
+*.gz
+*.tar
+
+# 
+docker/
+ckpts/
+sample_data/
+data/*
+!data/.gitkeep
+output/
+debug/
+vis/
+logs/
+document/
