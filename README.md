@@ -46,7 +46,8 @@
 `init`。`init`、`recon3d-params` 和 `start` 必须在开始写入本次任务数据前完成。
 不要在任务运行中再次调用 `init` 或 `start`。场景切换必须按 `stop → init →
 可选更新相机参数 → start` 执行；BoxerNet 和 GroundingDINO 在同一服务进程中
-保持常驻，不会因场景 stop 重新加载。
+保持常驻，不会因场景 stop 重新加载。若当前场景尚未完成 stop，处理器会直接
+拒绝新的 start，不会创建第二套帧/Fuse worker 或重复访问 GroundingDINO 管道。
 
 以下命令给出一套完整示例：
 

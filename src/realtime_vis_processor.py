@@ -96,6 +96,7 @@ class RealtimeVisProcessor:
             index: label for label, index in self.sem_name_to_id.items()
         }
         self.scene: Optional[SceneRuntime] = None
+        self.scene_lifecycle_lock = threading.Lock()
         self.frame_condition = threading.Condition()
         self.pending_frame = None
         self.frame_active = False
@@ -162,7 +163,30 @@ class RealtimeVisProcessor:
         height: int,
         error_callback: Callable[[Exception], None],
     ) -> None:
-        """Initialize one scene output and incremental Fuse state."""
+        """Reject overlapping starts and initialize one new scene."""
+        with self.scene_lifecycle_lock:
+            if self.scene is not None:
+                raise RuntimeError(
+                    "an Obj3DBB scene is already active; call "
+                    "/api/realtime/stop before starting another scene"
+                )
+            self._pre_start_scene(
+                output_path,
+                intrinsics,
+                width,
+                height,
+                error_callback,
+            )
+
+    def _pre_start_scene(
+        self,
+        output_path: Path,
+        intrinsics: list[float],
+        width: int,
+        height: int,
+        error_callback: Callable[[Exception], None],
+    ) -> None:
+        """Create scene directories and workers under the lifecycle lock."""
         output_root = output_path.resolve()
         output_root.mkdir(parents=True, exist_ok=True)
         result_dirs = [
@@ -411,6 +435,11 @@ class RealtimeVisProcessor:
             scene.fuse_worker.request_abort()
 
     def close(self) -> None:
+        """Serialize scene shutdown against any new pre_start call."""
+        with self.scene_lifecycle_lock:
+            self._close_scene()
+
+    def _close_scene(self) -> None:
         """Stop and join active scene workers while retaining resident models."""
         scene = self.scene
         if scene is None:
