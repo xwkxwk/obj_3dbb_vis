@@ -569,13 +569,19 @@ class BoxerNet(nn.Module):
         self.cross_attn = AttentionBlockV2(self.dim, self.cross_depth, self.heads)
 
     @classmethod
-    def load_from_checkpoint(cls, ckpt_path, device="cuda"):
-        if device == "cuda":
+    def load_from_checkpoint(
+        cls, ckpt_path: str, device: str = "cuda"
+    ) -> "BoxerNet":
+        """Load one Boxer checkpoint onto an explicit Torch device."""
+        device = torch.device(device)
+        if device.type == "cuda":
             assert torch.cuda.is_available()
-        elif device == "mps":
+            if device.index is not None:
+                assert device.index < torch.cuda.device_count()
+        elif device.type == "mps":
             assert torch.backends.mps.is_available()
-        else:
-            device = "cpu"
+        elif device.type != "cpu":
+            raise ValueError(f"Unsupported model device: {device}")
 
         ckpt_path = os.path.expanduser(ckpt_path)
         if not os.path.exists(ckpt_path):

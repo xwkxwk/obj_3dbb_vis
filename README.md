@@ -262,6 +262,36 @@ stop 会先封锁当前场景的最终文件发布，再等待正在计算的帧
 时间戳；Fuse 读取方取 `fused/` 中最大数值时间戳。服务不会通过 Redis 发布路径，
 也不生成 timing 或显存统计文件。
 
+## GPU 运行模式
+
+GPU 模式由 `conf/config.yaml` 设置，默认使用两张卡：
+
+```yaml
+gpu:
+  mode: dual
+  detection_device: cuda:0
+  fuse_device: cuda:1
+```
+
+- `dual`：GroundingDINO、Boxer 和逐帧检测使用 `detection_device`，增量 Fuse
+  使用不同的 `fuse_device`。
+- `single`：检测与 Fuse 都使用 `detection_device`，配置中的 `fuse_device` 被忽略。
+
+设备名必须使用明确的 `cuda:N` 格式。CUDA 不可用、编号超出容器内可见 GPU
+范围，或双卡模式把检测和 Fuse 配置到同一设备时，服务会在模型初始化阶段直接
+失败，不会降级到单卡或 CPU。GPU 配置只在服务启动时读取；修改运行模式或设备
+编号后必须重启服务。容器继续通过 `--gpus all` 暴露全部 GPU，配置中的编号是
+容器内可见设备编号。
+
+单卡配置示例：
+
+```yaml
+gpu:
+  mode: single
+  detection_device: cuda:0
+  fuse_device: cuda:1  # 单卡模式下忽略
+```
+
 
 ## 服务部署
 

@@ -57,7 +57,13 @@ class Obj3DBBVis_Realtime_Engine(Realtime_Processor_Engine):
         self.register_camera_params_route()
         run_config = build_realtime_config(self.full_config, self.config_path)
         processor = RealtimeVisProcessor(run_config)
-        logger.info("Obj3DBB visualization models loaded")
+        logger.info(
+            "Obj3DBB visualization models loaded: gpu_mode={} "
+            "detection_device={} fuse_device={}",
+            run_config["gpu_mode"],
+            run_config["detection_device"],
+            run_config["fuse_device"],
+        )
         return processor
 
     def pre_start_thread(self, scene_id: str) -> None:

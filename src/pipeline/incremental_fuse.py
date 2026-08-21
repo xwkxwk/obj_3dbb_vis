@@ -356,7 +356,11 @@ class IncrementalFuseWorker:
 
             cutoff_time_ns = int(frames[-1].time_ns)
             try:
-                self.fuser.update(frames)
+                if self.cuda_enabled:
+                    with torch.cuda.device(self.device):
+                        self.fuser.update(frames)
+                else:
+                    self.fuser.update(frames)
                 if self.publish_gate.is_cancelled():
                     count, published = 0, False
                 else:

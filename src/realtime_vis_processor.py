@@ -77,11 +77,14 @@ class RealtimeVisProcessor:
     def __init__(self, run_config: dict) -> None:
         """Load BoxerNet and start the persistent GroundingDINO process."""
         self.config = run_config
-        self.device = run_config["device"]
+        self.gpu_mode = run_config["gpu_mode"]
+        self.detection_device = run_config["detection_device"]
+        self.fuse_device = run_config["fuse_device"]
         self.vocabulary = run_config["vocabulary"]
-        self.boxernet = BoxerNet.load_from_checkpoint(
-            run_config["checkpoint"], device=self.device
-        )
+        with torch.cuda.device(torch.device(self.detection_device)):
+            self.boxernet = BoxerNet.load_from_checkpoint(
+                run_config["checkpoint"], device=self.detection_device
+            )
         self.groundingdino = start_groundingdino_server(
             run_config["groundingdino"]
         )
@@ -192,7 +195,7 @@ class RealtimeVisProcessor:
             self.scene = scene
         scene.fuse_worker = IncrementalFuseWorker(
             self.config["fuse"],
-            self.device,
+            self.fuse_device,
             str(fused_dir),
             self.vocabulary,
             scene.publish_gate,
@@ -426,8 +429,7 @@ class RealtimeVisProcessor:
                 self.pending_frame = None
                 self.frame_active = False
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        self._empty_cuda_caches()
 
     def shutdown(self, timeout: float = 10.0) -> bool:
         """Release active scene workers and both resident models."""
@@ -441,8 +443,7 @@ class RealtimeVisProcessor:
         self.groundingdino = None
         self.boxernet = None
         gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        self._empty_cuda_caches()
         return True
 
     def force_stop_groundingdino(self) -> None:
@@ -503,16 +504,13 @@ class RealtimeVisProcessor:
     ) -> tuple:
         """Run Boxer and retain confidence-qualified 3D boxes."""
         datum["bb2d"] = bb2d
-        if self.device == "cuda":
-            precision = (
-                torch.bfloat16
-                if torch.cuda.is_bf16_supported()
-                else torch.float32
-            )
-            with torch.autocast(device_type="cuda", dtype=precision):
+        device = torch.device(self.detection_device)
+        with torch.cuda.device(device):
+            if torch.cuda.is_bf16_supported():
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                    outputs = self.boxernet.forward(datum)
+            else:
                 outputs = self.boxernet.forward(datum)
-        else:
-            outputs = self.boxernet.forward(datum)
         obb_pr_w = outputs["obbs_pr_w"].cpu()[0]
 
         semantic_ids = torch.zeros(len(labels2d), dtype=torch.int32)
@@ -550,6 +548,12 @@ class RealtimeVisProcessor:
             bb2d_for_3d,
             source_2d_for_3d,
         )
+
+    def _empty_cuda_caches(self) -> None:
+        """Release transient CUDA cache on every configured service device."""
+        for device_name in {self.detection_device, self.fuse_device}:
+            with torch.cuda.device(torch.device(device_name)):
+                torch.cuda.empty_cache()
 
     @staticmethod
     def _build_pose(

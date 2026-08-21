@@ -72,6 +72,45 @@ def vocabulary_name_cn(name: str, vocabulary: dict) -> str:
     return vocabulary.get("en_to_cn", {}).get(str(name), str(name))
 
 
+def resolve_gpu_config(config: dict) -> tuple[str, str, str]:
+    """Validate GPU mode and return detection and effective Fuse devices."""
+    gpu_config = config.get("gpu", {})
+    mode = str(gpu_config.get("mode", "dual")).strip().lower()
+    if mode not in {"single", "dual"}:
+        raise ValueError("gpu.mode must be 'single' or 'dual'")
+
+    detection_device = str(
+        gpu_config.get("detection_device", "cuda:0")
+    ).strip().lower()
+    configured_fuse_device = str(
+        gpu_config.get("fuse_device", "cuda:1")
+    ).strip().lower()
+    device_names = [detection_device]
+    if mode == "dual":
+        device_names.append(configured_fuse_device)
+
+    devices = []
+    for name in device_names:
+        device = torch.device(name)
+        if device.type != "cuda" or device.index is None:
+            raise ValueError(f"GPU device must use explicit cuda:N format: {name}")
+        devices.append(device)
+
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is unavailable; obj_3dbb_vis requires a GPU")
+    device_count = torch.cuda.device_count()
+    for device in devices:
+        if device.index >= device_count:
+            raise RuntimeError(
+                f"GPU device {device} is unavailable; visible device count={device_count}"
+            )
+    if mode == "dual" and devices[0] == devices[1]:
+        raise ValueError("dual GPU mode requires different detection and Fuse devices")
+
+    fuse_device = detection_device if mode == "single" else configured_fuse_device
+    return mode, detection_device, fuse_device
+
+
 def build_realtime_config(config: dict, config_path: str) -> dict:
     """Build the camera-independent realtime processor configuration."""
     boxer_config = config.get("boxer", {})
@@ -81,11 +120,13 @@ def build_realtime_config(config: dict, config_path: str) -> dict:
     validation_config = config.get("validation", {})
     boxer_model = _get(config, "models.boxer", {})
     groundingdino_model = _get(config, "models.groundingdino", {})
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    gpu_mode, detection_device, fuse_device = resolve_gpu_config(config)
     vocabulary = load_vocabulary(config_path, config)
 
     return {
-        "device": device,
+        "gpu_mode": gpu_mode,
+        "detection_device": detection_device,
+        "fuse_device": fuse_device,
         "force_precision": None,
         "checkpoint": resolve_path(boxer_model["checkpoint"]),
         "num_samples": int(boxer_config.get("num_samples", 100000)),
@@ -137,7 +178,7 @@ def build_realtime_config(config: dict, config_path: str) -> dict:
             "bert_path": resolve_path(groundingdino_model["bert_path"]),
             "conda_env": "xwk_gdino",
             "python": None,
-            "device": "cuda:0" if torch.cuda.is_available() else "cpu",
+            "device": detection_device,
             "prompt": vocabulary["prompt"],
             "box_threshold": float(detector_config.get("box_threshold", 0.3)),
             "text_threshold": float(detector_config.get("text_threshold", 0.25)),

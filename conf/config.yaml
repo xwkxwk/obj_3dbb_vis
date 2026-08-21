@@ -19,6 +19,11 @@ service:
 log:
   mode: release
 
+gpu:
+  mode: dual
+  detection_device: cuda:0
+  fuse_device: cuda:1
+
 vocabulary: "1805"
 
 models:
