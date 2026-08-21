@@ -31,7 +31,7 @@ htmlcov/
 docker/
 ckpts/
 sample_data/
-data/*
+data/
 !data/.gitkeep
 output/
 debug/
