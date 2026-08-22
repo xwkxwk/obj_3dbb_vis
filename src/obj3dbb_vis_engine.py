@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 
+from flask import has_request_context
 from loguru import logger
 
 from infrastructure.framework.engine import Realtime_Processor_Engine
@@ -30,6 +31,7 @@ class Obj3DBBVis_Realtime_Engine(Realtime_Processor_Engine):
         self.intrinsics = None
         self.width = None
         self.height = None
+        self.requested_output_path: Optional[str] = None
         super().__init__(redis_client, processor_config)
 
     def register_camera_params_route(self) -> None:
@@ -68,7 +70,16 @@ class Obj3DBBVis_Realtime_Engine(Realtime_Processor_Engine):
 
     def pre_start_thread(self, scene_id: str) -> None:
         """Initialize scene output and internal latest-frame workers."""
-        self.output_path = self.scene_path / "obj3dbb_vis"
+        if has_request_context():
+            request_data = self._http_request.get_json(silent=True)
+            requested_output_path = (
+                request_data.get("output_path")
+                if isinstance(request_data, dict)
+                else None
+            )
+        else:
+            requested_output_path = self.requested_output_path
+        self.output_path = self._resolve_output_path(requested_output_path)
         self.processor.pre_start(
             self.output_path,
             self.intrinsics,
@@ -82,6 +93,19 @@ class Obj3DBBVis_Realtime_Engine(Realtime_Processor_Engine):
             self.input_topic_name,
             self.output_path,
         )
+
+    def _resolve_output_path(self, output_path: Optional[str]) -> Path:
+        """Resolve the required result root from the service project root."""
+        if not isinstance(output_path, str) or not output_path.strip():
+            raise ValueError("output_path must be a non-empty string")
+
+        candidate = Path(output_path.strip())
+        if not candidate.is_absolute():
+            candidate = Path(__file__).resolve().parents[1] / candidate
+        resolved = candidate.resolve()
+        if resolved == Path(resolved.anchor):
+            raise ValueError("output_path cannot be the filesystem root")
+        return resolved
 
     def handle_inputdata(
         self, message: dict

@@ -49,7 +49,7 @@ if [[ ! -d "${SCENE_DATA_HOME}" ]]; then
     echo "Set OBJ3DBB_DATA_HOME to the host directory mounted as /data"
     exit 1
 fi
-mkdir -p "${SERVICE_HOME}/logs"
+mkdir -p "${SERVICE_HOME}/logs" "${SERVICE_HOME}/output"
 
 if docker container inspect "${CONTAINER_NAME}" >/dev/null 2>&1; then
     bash "${SERVICE_HOME}/scripts/stop.sh"
@@ -69,6 +69,7 @@ DOCKER_ARGS=(
     --volume "${SERVICE_HOME}/libs/boxer:/workspace/boxer/libs/boxer:ro"
     --volume "${SERVICE_HOME}/ckpts:/workspace/boxer/ckpts:ro"
     --volume "${SERVICE_HOME}/logs:/workspace/boxer/logs"
+    --volume "${SERVICE_HOME}/output:/workspace/boxer/output"
     --volume "${SCENE_DATA_HOME}:/data"
 )
 

@@ -81,7 +81,8 @@ curl -X POST http://127.0.0.1:8883/api/realtime/start \
   -d '{
     "scene_id": "scene001",
     "start_timestamp": 0,
-    "input_topic_name": "simu4d:perceive:camera"
+    "input_topic_name": "simu4d:perceive:camera",
+    "output_path": "output/scene001"
   }'
 
 # 5. 停止当前场景；接口返回后服务和模型继续常驻
@@ -92,7 +93,14 @@ curl -X POST http://127.0.0.1:8883/api/realtime/stop \
 
 `output_topic_name` 可兼容传入 start 请求，但不会使用。实际 Redis Stream 使用
 start 请求中的 `input_topic_name`；YAML 中的 `input_queue_name` 只是调用方默认
-约定。核心接口的状态码和异常响应以 `sim-infrastructure==2.3` 为准。
+约定。`output_path` 是必填的结果根目录：绝对路径不限制在 `/data` 下，相对路径
+以 `obj_3dbb_vis` 项目根目录解析（容器中为 `/workspace/boxer`）。指定路径不会再
+追加 `scene_id` 或 `obj3dbb_vis`。核心接口的状态码和异常响应以
+`sim-infrastructure==2.3` 为准。
+
+`start.sh` 会自动创建宿主机项目根目录的 `output/`，并挂载到容器的
+`/workspace/boxer/output/`。因此推荐使用 `output/<scene_id>` 相对路径，结果会
+持久化到宿主机 `obj_3dbb_vis/output/<scene_id>/`。
 
 ### Engine 类内部调用顺序
 
@@ -186,6 +194,7 @@ engine.intrinsics = [900, 0, 640, 0, 900, 360, 0, 0, 1]
 engine.width = 1280
 engine.height = 720
 engine.scene_path = engine.base_scene_path / scene_id
+engine.requested_output_path = "output/scene001"
 
 engine.do_start(scene_id, topic_name, 0, None)
 try:
@@ -243,14 +252,17 @@ docker exec -it proc-sim-obj3dbb-vis \
 
 ## 输出约定
 
-每次 start 只清空并重建当前场景的三个结果子目录：
+每次 start 只清空并重建 `output_path` 指定结果根目录中的三个结果子目录。例如：
 
 ```text
-/data/scene/<scene_id>/obj3dbb_vis/
+output/scene001/
   2D_detections/<ts>.jpg
   3D_detections/<ts>.jpg
   fused/<截止帧ts>.csv
 ```
+
+只会清理该路径下的 `2D_detections/`、`3D_detections/` 和 `fused/`，不会删除
+结果根目录中的其他文件。
 
 两张图片使用成对原子发布，JPEG 质量为 85；2D 图绘制过滤前的原始 DINO
 框，3D 图只绘制最终 validation 后的 3DBB。Fuse CSV 使用 SFM 坐标、稳定
@@ -302,6 +314,7 @@ gpu:
 ```text
 obj_3dbb_vis/
   data/
+  output/
   scripts/
   src/
 ```
@@ -319,8 +332,8 @@ ckpts/
 ```
 
 启动脚本会将服务的 `src/`、`conf/`、`scripts/`、`libs/boxer/` 覆盖挂载到基础镜像的
-`/workspace/boxer`，`ckpts/` 只读挂载，`logs/` 可写挂载，场景数据挂载到
-`/data`。容器使用全部 GPU、host 网络，名称为
+`/workspace/boxer`，`ckpts/` 只读挂载，`logs/` 和 `output/` 可写挂载，场景数据
+挂载到 `/data`。容器使用全部 GPU、host 网络，名称为
 `proc-sim-obj3dbb-vis`。
 
 ```bash
