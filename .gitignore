@@ -32,7 +32,6 @@ docker/
 ckpts/
 sample_data/
 data/
-!data/.gitkeep
 output/
 debug/
 vis/
